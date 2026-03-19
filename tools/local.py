@@ -8,6 +8,7 @@ from threading import Lock, Thread
 from typing import Optional
 
 
+
 _COMPRESSION_JOBS = {}
 _COMPRESSION_JOBS_LOCK = Lock()
 

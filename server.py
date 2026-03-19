@@ -2,10 +2,10 @@ import asyncio
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from utils.browser import close_browser
-from tools.sourcing import search_source, get_poster, get_torrent_source
+from tools.sourcing import search_torrents, get_poster, get_torrent_source
 from tools.utorrent import start_utorrent, download_torrent, check_download_progress
 from tools.local import compress_media, check_preparation_progress, search_locally
-from tools.redpanda import upload_media
+from tools.redpanda import upload_episode, upload_media
 
 
 
@@ -41,7 +41,7 @@ async def searchMedia(
     """
     Search for movies or series or season of a series files based on a query (simple title).
     """
-    results = await asyncio.to_thread(search_source, query=query)
+    results = await search_torrents(query=query)
     return {
         "query": query,
         "count": len(results),
@@ -63,7 +63,7 @@ async def getTorrent(
     """
     Download an official source file from the specified link.
     """
-    return await asyncio.to_thread(get_torrent_source, link)
+    return await get_torrent_source(link)
 
 
 @mcp.tool(
@@ -163,7 +163,7 @@ async def downloadPoster(
     """
     Search for a poster for the specified title.
     """
-    return await asyncio.to_thread(get_poster, title)
+    return await get_poster(title)
 
 
 @mcp.tool(
@@ -180,29 +180,37 @@ async def uploadMedia(
     video_path: str = Field(description="Path to the media file (only for movies)."),
     poster_path: str = Field(description="Path to the poster file."),
     description: str = Field(description="Description of the media (optional)."),
-    release_date: str = Field(description="Release date (DD/MM/YYYY) of the media (optional)."),
+    release_date: str = Field(description="Release date (YYYY-MM-DD) of the media (optional)."),
     seasonsNumber: str = Field(description="Number of seasons (only for series).")
     ) -> dict:
     """
     Upload the processed media file to the website.
     """
-    return await asyncio.to_thread(upload_media, mediaType=mediaType, title=title, video_path=video_path, poster_path=poster_path, description=description, release_date=release_date, seasonsNumber=seasonsNumber)
+    return await upload_media(mediaType=mediaType, title=title, video_path=video_path, poster_path=poster_path, description=description, release_date=release_date, seasonsNumber=seasonsNumber)
 
 
-# @mcp.tool(
-#     annotations = {
-#         "readOnlyHint": False,
-#         "destructiveHint": True,
-#         "idempotentHint": False,
-#         "openWorldHint": True
-#     }
-# )
-# async def uploadEpisode(  
-#     ) -> dict:
-#     """
-#     Upload the processed episode file of a series to the website.
-#     """
-#     return await asyncio.to_thread()
+@mcp.tool(
+    annotations = {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": False,
+        "openWorldHint": True
+    }
+)
+async def uploadEpisode(
+    seriesTitle: str = Field(description="Title of the series."),
+    seasonNumber: str = Field(description="Number of the season."),
+    episodeNumber: str = Field(description="Number of the episode."),
+    episodeTitle: str = Field(description="Title of the episode. (preffered but optional)"),
+    video_path: str = Field(description="Path to the episode file."),
+    poster_path: str = Field(description="Path to the poster file. (optional - usually not needed for episodes)"),
+    description: str = Field(description="Description of the episode (optional)."),
+    release_date: str = Field(description="Release date (YYYY-MM-DD) of the episode (optional).")
+    ) -> dict:
+    """
+    Upload the processed episode file of a series to the website.
+    """
+    return await upload_episode(series_title=seriesTitle, season_number=seasonNumber, episode_number=episodeNumber, episode_title=episodeTitle, video_path=video_path, poster_path=poster_path, description=description, release_date=release_date)
 
 
 @mcp.tool(
@@ -217,7 +225,7 @@ async def closeSession() -> str:
     """
     Close the persistent browser session manually.
     """
-    await asyncio.to_thread(close_browser)
+    await close_browser()
     return "Session closed"
 
 

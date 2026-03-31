@@ -1,6 +1,6 @@
 import logging
 import re
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 from playwright.async_api import Page
 from helpers import (
     DOWNLOAD_DIR,
@@ -194,3 +194,70 @@ async def get_torrent_source(link: str) -> dict:
         }
 
     return await run_with_page(_run, headless=True)
+
+
+async def search_subtitles(query: str) -> list[dict]:
+    """
+    Search for subtitles matching the query.
+    """
+    async def _run(page: Page) -> list[dict]:
+        await page.goto("https://www.subtitlecat.com/")
+        await page.get_by_role("textbox", name="Search subtitle").click()
+        await page.get_by_role("textbox", name="Search subtitle").fill(query)
+        await page.get_by_role("button", name="Search").click()
+
+        await page.wait_for_load_state("networkidle")
+
+
+        items = page.locator("tr td a[href*='subs/']")
+        results = []
+
+        count = await items.count()
+
+        for i in range(count):
+            link = items.nth(i)
+            text = await link.text_content()
+
+            href = await link.get_attribute("href")
+
+            results.append({
+                "title": text.strip(),
+                "url": urljoin(page.url, href),
+            })
+
+        return results
+
+    return await run_with_page(_run, headless=True)
+
+
+async def download_subtitle(link: str) -> dict:
+    """
+    Download the subtitle file from the specified link and return saved file info.
+    """
+    if not link or not link.strip():
+        raise ValueError("Subtitle link cannot be empty.")
+
+    async def _run(page: Page) -> dict:
+        subtitle_page_url = link.strip()
+        await page.goto(subtitle_page_url, wait_until="domcontentloaded")
+        await page.wait_for_load_state("networkidle")
+
+        # English download button used by subtitlecat pages.
+        download_trigger = page.locator("#download_en")
+        
+        async with page.expect_download() as download_info:
+            await download_trigger.click()
+
+        download = await download_info.value
+        filename = download.suggested_filename or "subtitle.srt"
+        output_path = DOWNLOAD_DIR / filename
+        await download.save_as(str(output_path))
+
+        return {
+            "source_url": subtitle_page_url,
+            "filename": filename,
+            "saved_to": str(output_path),
+        }
+
+    return await run_with_page(_run, headless=True)
+

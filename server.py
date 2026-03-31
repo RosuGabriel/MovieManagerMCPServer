@@ -1,11 +1,18 @@
 import asyncio
-from mcp.server.fastmcp import FastMCP
+from typing import Optional
+from mcp.server.fastmcp import FastMCP, Context
 from pydantic import Field
 from utils.browser import close_browser
-from tools.sourcing import search_torrents, get_poster, get_torrent_source
+from tools.sourcing import (
+    search_subtitles,
+    search_torrents,
+    get_poster,
+    get_torrent_source,
+    download_subtitle,
+)
 from tools.utorrent import start_utorrent, download_torrent, check_download_progress
 from tools.local import compress_media, check_preparation_progress, search_locally
-from tools.redpanda import upload_episode, upload_media
+from tools.redpanda import upload_episode, upload_media, upload_subtitle
 
 
 
@@ -179,8 +186,8 @@ async def uploadMedia(
     title: str = Field(description="Title of the media."),
     video_path: str = Field(description="Path to the media file (only for movies)."),
     poster_path: str = Field(description="Path to the poster file."),
-    description: str = Field(description="Description of the media (optional)."),
-    release_date: str = Field(description="Release date (YYYY-MM-DD) of the media (optional)."),
+    description: Optional[str] = Field(description="Description of the media (optional)."),
+    release_date: Optional[str] = Field(description="Release date (YYYY-MM-DD) of the media (optional)."),
     seasonsNumber: str = Field(description="Number of seasons (only for series).")
     ) -> dict:
     """
@@ -193,7 +200,7 @@ async def uploadMedia(
     annotations = {
         "readOnlyHint": False,
         "destructiveHint": True,
-        "idempotentHint": False,
+        "idempotentHint": True,
         "openWorldHint": True
     }
 )
@@ -201,16 +208,71 @@ async def uploadEpisode(
     seriesTitle: str = Field(description="Title of the series."),
     seasonNumber: str = Field(description="Number of the season."),
     episodeNumber: str = Field(description="Number of the episode."),
-    episodeTitle: str = Field(description="Title of the episode. (preffered but optional)"),
+    episodeTitle: Optional[str] = Field(description="Title of the episode. (preffered but optional)"),
     video_path: str = Field(description="Path to the episode file."),
-    poster_path: str = Field(description="Path to the poster file. (optional - usually not needed for episodes)"),
-    description: str = Field(description="Description of the episode (optional)."),
-    release_date: str = Field(description="Release date (YYYY-MM-DD) of the episode (optional).")
+    poster_path: Optional[str] = Field(description="Path to the poster file. (optional - usually not needed for episodes)"),
+    description: Optional[str] = Field(description="Description of the episode (optional)."),
+    release_date: Optional[str] = Field(description="Release date (YYYY-MM-DD) of the episode (optional).")
     ) -> dict:
     """
     Upload the processed episode file of a series to the website.
     """
     return await upload_episode(series_title=seriesTitle, season_number=seasonNumber, episode_number=episodeNumber, episode_title=episodeTitle, video_path=video_path, poster_path=poster_path, description=description, release_date=release_date)
+
+
+@mcp.tool(
+    annotations = {
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def searchSubtitles(
+    query: str = Field(description="The title of the movie or series + season/episode + quality and format if possible.")
+    ) -> dict:
+    """
+    Search for subtitles matching the query.
+    """
+    return await search_subtitles(query)
+
+
+@mcp.tool(
+    annotations = {
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def downloadSubtitle(
+    link: str = Field(description="Subtitle page URL obtained from searchSubtitles.")
+    ) -> dict:
+    """
+    Download a subtitle file from the specified subtitle page.
+    """
+    return await download_subtitle(link)
+
+
+@mcp.tool(
+    annotations = {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": False,
+        "openWorldHint": True
+    }
+)
+async def uploadSubtitle(
+    subtitlePath: str = Field(description="Path to the subtitle file."),
+    mediaTitle: str = Field(description="Title of the media the subtitle belongs to."),
+    language: str = Field(description="Language of the subtitle (default is English - fill only if different with the language in its translation)."),
+    seasonNumber: str = Field(description="Season number (only for series episodes)."),
+    episodeNumber: str = Field(description="Episode number (only for series episodes).")
+    ) -> dict:
+    """
+    Upload a subtitle file to the website.
+    """
+    return await upload_subtitle(subtitle_path=subtitlePath, media_title=mediaTitle, language=language, season_number=seasonNumber, episode_number=episodeNumber)
 
 
 @mcp.tool(

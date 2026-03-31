@@ -9,6 +9,7 @@ from helpers import (
     REDPANDA_USERNAME,
 )
 from utils.browser import run_with_page
+from tools.local import process_subtitles
 
 
 
@@ -208,6 +209,70 @@ async def upload_episode(
             "title": episode_title,
             "season": season_number,
             "episode": episode_number,
+            "status": "error",
+            "message": str(e),
+        }
+    
+
+async def upload_subtitle(
+        subtitle_path: str = "",
+        media_title: str = "",
+        language: str = "",
+        season_number: str = "",
+        episode_number: str = "",
+) -> dict:
+    """Upload a subtitle file to the website."""
+
+    async def _run(page: Page) -> dict:
+        await page.goto(REDPANDA_MEDIA_URL, wait_until="domcontentloaded")
+        await page.wait_for_load_state("networkidle")
+        await redpanda_login(page=page)
+        await page.goto(REDPANDA_MEDIA_URL, wait_until="domcontentloaded")
+        await page.wait_for_load_state("networkidle")
+
+        logging.info(f"Uploading subtitle from path: {subtitle_path}")
+
+        if not subtitle_path:
+            raise ValueError("Subtitle path is required.")
+        
+        await page.get_by_role("link", name=re.compile(media_title, re.IGNORECASE)).click()
+        
+        # If it's an episode, navigate to the episode page first.
+        if season_number.strip() and episode_number.strip():
+            await page.select_option('#seasonSelect', season_number)
+            episode_link = page.locator(
+                "a.btn.btn-dark.w-100",
+                has_text=f"Episode {episode_number}",
+            ).first
+            await episode_link.click()
+            await page.wait_for_load_state("networkidle")
+        
+        add_atribute_url = page.url.replace("/media/", "/add-attribute/")
+        await page.goto(add_atribute_url, wait_until="domcontentloaded")
+
+        if language:
+            await page.get_by_label("Language").select_option(label=language.title())
+
+        await page.get_by_role("button", name="File").set_input_files(vtt_subtitle_path)
+
+        await page.get_by_role("button", name="Add Attribute").click()
+
+        return {
+            "subtitle_path": vtt_subtitle_path,
+            "status": "uploaded",
+        }
+    
+    vtt_subtitle_path = re.sub(r"\.\w+$", ".vtt", subtitle_path)
+
+    try:
+        logging.info(f"Processing subtitle file: {subtitle_path} to VTT format at: {vtt_subtitle_path}")
+        process_subtitles(subtitle_path, vtt_subtitle_path)
+        logging.info(f"Subtitle file processed successfully, starting upload.")
+        return await run_with_page(_run, headless=True)
+    except Exception as e:
+        logging.error("Failed to upload subtitle: %s", e)
+        return {
+            "subtitle_path": vtt_subtitle_path,
             "status": "error",
             "message": str(e),
         }

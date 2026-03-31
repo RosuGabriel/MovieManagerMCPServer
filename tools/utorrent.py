@@ -1,11 +1,11 @@
 import logging
-import shutil
 import requests
 import re
 from pathlib import Path
 from requests.auth import HTTPBasicAuth
 from helpers import DOWNLOAD_DIR, UTORRENT_LOCATION, UTORRENT_LOCATION, UTORRENT_LOCATION, UTORRENT_URL, UTORRENT_USERNAME, UTORRENT_PASSWORD
 import os
+from tools.local import delete_file
 
 
 
@@ -111,6 +111,7 @@ def check_download_progress(torrent_identifier: str) -> dict:
                     "progress": progress_pct,
                     "status": item[1],
                     "download directory": item[26] if len(item) > 26 else "N/A",
+                    "torrent_identifier": torrent_identifier,
                 }
             )
 
@@ -127,11 +128,15 @@ def check_download_progress(torrent_identifier: str) -> dict:
                 "message": f"Torrent not found: {torrent_identifier}",
                 "torrent_identifier": torrent_identifier,
             }
+        
+        if selected["progress"] >= 100.0:
+            delete_file(str(Path(DOWNLOAD_DIR, selected["name"].with_suffix(".torrent"))))
 
         return {
             "status": selected["status"],
             "progress": selected["progress"],
             "torrent": selected,
+            "torrent_identifier": torrent_identifier,
         }
     
     except Exception as exc:
@@ -139,4 +144,5 @@ def check_download_progress(torrent_identifier: str) -> dict:
         return {
             "status": "error",
             "message": f"Failed to fetch progress: {exc}",
+            "torrent_identifier": torrent_identifier,
         }

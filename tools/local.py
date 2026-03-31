@@ -1,9 +1,11 @@
+import logging
 import os
 from helpers import DOWNLOAD_DIR
 import subprocess
 from pathlib import Path
 import re
 from datetime import timedelta
+import time
 from threading import Lock, Thread
 from typing import Optional
 
@@ -179,6 +181,25 @@ def compress_media(file_path: str) -> dict:
     }
 
 
+def delete_file(file_path: str) -> dict:
+    """Delete a specified file from the local storage."""
+    target_path = Path(file_path)
+    if not target_path.exists():
+        return {
+            "status": "not found",
+            "file_path": str(target_path),
+        }
+
+    try:
+        target_path.unlink()
+        return {
+            "status": "deleted",
+            "file_path": str(target_path),
+        }
+    except OSError as exc:
+        raise RuntimeError(f"Error deleting file: {exc}") from exc
+
+
 def check_preparation_progress(file_path: str) -> dict:
     media_path = Path(file_path)
     media_key = str(media_path.resolve()).lower()
@@ -191,11 +212,14 @@ def check_preparation_progress(file_path: str) -> dict:
 
     if not job:
         if final_output.exists() and not media_path.exists():
+            time.sleep(3) 
             return {
                 "status": "completed",
                 "input_file": str(media_path),
                 "output_file": str(final_output),
                 "progress_percent": 100.0,
+                "original file": delete_file(str(media_path)),
+                "progress file": delete_file(str(progress_file)),
             }
 
         if temp_output.exists() or progress_file.exists():
@@ -299,9 +323,14 @@ def crop_poster(file_path: str) -> dict:
 
 def process_subtitles(input_file: str, output_file: str=None, offset_seconds: float=0) -> None:
     """
+    Converts subtitle file from SRT to VTT format and applies a time offset if specified.
     Shift all timestamps in an SRT file by offset_seconds.
     Positive = add, negative = subtract.
     """
+    if not offset_seconds and input_file.lower().endswith(".vtt"):
+        logging.info(f"No offset specified and file is already in VTT format. Skipping processing for {input_file}.")
+        return
+    
     srt_path = Path(input_file)
     if not srt_path.exists():
         raise FileNotFoundError(f"{input_file} not found.")
@@ -346,4 +375,4 @@ def process_subtitles(input_file: str, output_file: str=None, offset_seconds: fl
         f.write(new_content)
         f.flush()
 
-    print(f"Processed subtitles saved to {output_file}")
+    logging.info(f"Processed subtitles saved to {output_file}")

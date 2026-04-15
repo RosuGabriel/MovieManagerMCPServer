@@ -1,5 +1,5 @@
 from typing import Optional
-from mcp_instance import mcp
+from utils.mcp_instance import mcp
 from pydantic import Field
 from services.redpanda import (
     upload_episode,

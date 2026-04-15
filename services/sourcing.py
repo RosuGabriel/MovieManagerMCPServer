@@ -2,7 +2,7 @@ import logging
 import re
 from urllib.parse import quote_plus, urljoin
 from playwright.async_api import Page
-from helpers import (
+from utils.helpers import (
     DOWNLOAD_DIR,
     SOURCES_SITE_BROWSE_URL,
     SOURCES_SITE_DOWNLOAD_URL,

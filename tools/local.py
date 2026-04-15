@@ -1,6 +1,7 @@
-from mcp_instance import mcp
+from utils.mcp_instance import mcp
 import asyncio
 from pydantic import Field
+from typing import Optional
 from services.local import (
     compress_media,
     check_preparation_progress,
@@ -32,9 +33,10 @@ async def searchLocally() -> dict:
     description = "Compress the media file to reduce its size for upload and convert it to mp4."
 )
 async def prepareMedia(
-    file_path: str = Field(description="Path to the media file to be prepared for upload.")
+    file_path: str = Field(description="Path to the media file to be prepared for upload."),
+    torrent_hash: Optional[str] = Field(default=None, description="Optional torrent hash to stop and remove after compression."),
     ) -> dict:
-    return await asyncio.to_thread(compress_media, file_path)
+    return await asyncio.to_thread(compress_media, file_path, torrent_hash)
 
 
 @mcp.tool(

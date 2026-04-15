@@ -1,11 +1,11 @@
-from mcp_instance import mcp
+from utils.mcp_instance import mcp
 import asyncio
 from pydantic import Field
 from services.utorrent import (
     start_utorrent,
     download_torrent,
     check_download_progress,
-    remove_with_data
+    stop_and_cleanup_torrent
 )
 
 
@@ -60,9 +60,9 @@ async def checkTorrent(
         "idempotentHint": False,
         "openWorldHint": False
     },
-    description = "Remove a torrent and its associated data using torrent identifier."
+    description = "Stop the torrent and cleanup associated data."
 )
-async def torrentCleanup(
-    torrent_hash: str = Field(description="The hash of the torrent to be removed.")
+async def stopTorrent(
+    torrent_identifier: str = Field(description="Hash or exact local torrent file name with or without extension (a total of 3 options).")
     ) -> dict:
-    return await asyncio.to_thread(remove_with_data, torrent_hash)
+    return await asyncio.to_thread(stop_and_cleanup_torrent, torrent_identifier)

@@ -1,11 +1,10 @@
 import logging
-import time
 import requests
 import re
 import subprocess
 from pathlib import Path
 from requests.auth import HTTPBasicAuth
-from helpers import (
+from utils.helpers import (
     DOWNLOAD_DIR,
     TORRENT_CLIENT,
     UT_LOCATION,
@@ -106,11 +105,12 @@ def download_torrent(file_path: str) -> dict:
     return {
         "status": "started",
         "torrent_file": file_path,
-        "download_dir": DOWNLOAD_DIR
+        "download_dir": DOWNLOAD_DIR,
+        "response": response.json() if response.content else {}
     }
 
-
-def remove_with_data(torrent_hash):
+def stop_torrent(torrent_hash: str) -> dict:
+    """Stop a torrent by its hash."""
     session = _create_session()
     token = _get_token()
     if not token:
@@ -128,26 +128,51 @@ def remove_with_data(torrent_hash):
             "hash": torrent_hash
         }).raise_for_status()
 
-        time.sleep(1)
+        logging.info(f"Successfully stopped torrent with hash: {torrent_hash}")
+        
+        return {
+            "status": "stopped",
+            "torrent_hash": torrent_hash
+        }
+    except Exception as exc:
+        logging.exception(f"Failed to stop torrent {torrent_hash}")
+        return {
+            "status": "error",
+            "message": f"Failed to stop torrent: {exc}",
+            "torrent_hash": torrent_hash
+        }
 
+
+def remove_torrent_data(torrent_hash: str) -> dict:
+    """Remove data for a torrent by its hash."""
+    session = _create_session()
+    token = _get_token()
+    if not token:
+        return {
+            "status": "error",
+            "message": "Failed to retrieve uTorrent token.",
+            "torrent_hash": torrent_hash
+        }
+    
+    try:
         logging.info(f"Attempting to remove data for torrent with hash: {torrent_hash}")
-        session.get(UTORRENT_URL, params = {
+        session.get(UTORRENT_URL, params={
             "token": token,
             "action": "removedata",
             "hash": torrent_hash
         }).raise_for_status()
 
-        logging.info(f"Successfully removed torrent with hash: {torrent_hash}")
+        logging.info(f"Successfully removed data for torrent with hash: {torrent_hash}")
         
         return {
             "status": "removed",
             "torrent_hash": torrent_hash
         }
     except Exception as exc:
-        logging.exception("Failed to remove torrent with data")
+        logging.exception(f"Failed to remove data for torrent {torrent_hash}")
         return {
             "status": "error",
-            "message": f"Failed to remove torrent: {exc}",
+            "message": f"Failed to remove data: {exc}",
             "torrent_hash": torrent_hash
         }
 
@@ -194,10 +219,10 @@ def check_download_progress(torrent_identifier: str) -> dict:
                 }
             )
 
-        target = torrent_identifier.strip().lower()
+        target = torrent_identifier.strip().lower().replace(".torrent", "").replace(".mkv", "")
         selected = None
         for torrent in torrents:
-            if torrent["hash"].lower() == target or torrent["name"].lower() == target:
+            if torrent["hash"].lower() == target or torrent["name"].lower().replace(".torrent", "").replace(".mkv", "") == target:
                 selected = torrent
                 break
 
@@ -207,9 +232,6 @@ def check_download_progress(torrent_identifier: str) -> dict:
                 "message": f"Torrent not found: {torrent_identifier}",
                 "torrent_identifier": torrent_identifier,
             }
-        
-        if selected["progress"] >= 100.0:
-            remove_with_data(selected["hash"])
 
         return {
             "status": selected["status"],
@@ -225,3 +247,18 @@ def check_download_progress(torrent_identifier: str) -> dict:
             "message": f"Failed to fetch progress: {exc}",
             "torrent_identifier": torrent_identifier,
         }
+
+
+def stop_and_cleanup_torrent(torrent_hash: str) -> dict:
+    stop_result = stop_torrent(torrent_hash)
+    if stop_result.get("status") == "error":
+        return stop_result
+
+    remove_result = remove_torrent_data(torrent_hash)
+    if remove_result.get("status") == "error":
+        return remove_result
+
+    return {
+        "status": "stopped_and_removed",
+        "torrent_hash": torrent_hash,
+    }

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 SOURCES_SITE_URL = os.getenv("SOURCES_SITE_URL")

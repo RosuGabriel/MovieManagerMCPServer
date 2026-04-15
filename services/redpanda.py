@@ -1,7 +1,7 @@
 import logging
 import re
 from playwright.async_api import Page
-from helpers import (
+from utils.helpers import (
     REDPANDA_CREATE_URL,
     REDPANDA_LOGIN_URL,
     REDPANDA_MEDIA_URL,

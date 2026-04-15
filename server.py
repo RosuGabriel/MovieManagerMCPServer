@@ -1,10 +1,5 @@
-from mcp_instance import mcp
-from tools import (
-    media_getter,
-    media_uploader,
-    local,
-    utorrent
-)
+from utils.mcp_instance import mcp
+from tools import *
 
 
 

@@ -1,4 +1,4 @@
-from mcp_instance import mcp
+from utils.mcp_instance import mcp
 from pydantic import Field
 from services.sourcing import (
     download_subtitle,

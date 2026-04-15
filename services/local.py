@@ -1,6 +1,7 @@
 import logging
 import os
-from helpers import DOWNLOAD_DIR
+from utils.helpers import DOWNLOAD_DIR
+from services.utorrent import stop_torrent, remove_torrent_data
 import subprocess
 from pathlib import Path
 import re
@@ -60,7 +61,7 @@ def _parse_ffmpeg_progress(progress_file: Path) -> dict:
     return snapshot
 
 
-def _run_compression_job(media_path: Path, media_key: str) -> None:
+def _run_compression_job(media_path: Path, media_key: str, torrent_hash: Optional[str] = None) -> None:
     output_file = media_path.with_name(f"{media_path.stem}_temp.mp4")
     progress_file = media_path.with_name(f"{media_path.stem}_compress.progress")
 
@@ -98,6 +99,17 @@ def _run_compression_job(media_path: Path, media_key: str) -> None:
             _COMPRESSION_JOBS[media_key]["exit_code"] = process.returncode
         return
 
+    cleanup_results = {}
+    if torrent_hash:
+        cleanup_results["stop_torrent"] = stop_torrent(torrent_hash)
+        if cleanup_results["stop_torrent"].get("status") != "error":
+            cleanup_results["remove_torrent_data"] = remove_torrent_data(torrent_hash)
+        else:
+            cleanup_results["remove_torrent_data"] = {
+                "status": "skipped",
+                "reason": "stop_torrent_failed",
+            }
+
     final_path = media_path.with_suffix(".mp4")
 
     try:
@@ -110,6 +122,7 @@ def _run_compression_job(media_path: Path, media_key: str) -> None:
             )
             _COMPRESSION_JOBS[media_key]["stderr"] = str(exc)
             _COMPRESSION_JOBS[media_key]["exit_code"] = 1
+            _COMPRESSION_JOBS[media_key]["cleanup"] = cleanup_results
         return
 
     try:
@@ -122,20 +135,23 @@ def _run_compression_job(media_path: Path, media_key: str) -> None:
             )
             _COMPRESSION_JOBS[media_key]["stderr"] = str(exc)
             _COMPRESSION_JOBS[media_key]["exit_code"] = 1
+            _COMPRESSION_JOBS[media_key]["cleanup"] = cleanup_results
         return
 
     with _COMPRESSION_JOBS_LOCK:
         _COMPRESSION_JOBS[media_key]["status"] = "completed"
         _COMPRESSION_JOBS[media_key]["output_file"] = str(final_path)
+        _COMPRESSION_JOBS[media_key]["cleanup"] = cleanup_results
         _COMPRESSION_JOBS[media_key]["stdout"] = process.stdout.strip()
         _COMPRESSION_JOBS[media_key]["stderr"] = process.stderr.strip()
         _COMPRESSION_JOBS[media_key]["exit_code"] = process.returncode
 
 
 
-def compress_media(file_path: str) -> dict:
+def compress_media(file_path: str, torrent_hash: Optional[str] = None) -> dict:
     """
     Compress media using ffmpeg and replace the original file with an .mp4 output.
+    Optionally stop the torrent and remove its data after compression completes.
     """
     media_path = Path(file_path)
     if not media_path.exists():
@@ -168,13 +184,19 @@ def compress_media(file_path: str) -> dict:
             "output_file": str(output_file),
             "progress_file": str(progress_file),
             "duration_seconds": duration_seconds,
+            "torrent_hash": torrent_hash,
+            "cleanup": {},
             "error": "",
             "stdout": "",
             "stderr": "",
             "exit_code": None,
         }
 
-    Thread(target=_run_compression_job, args=(media_path, media_key), daemon=True).start()
+    Thread(
+        target=_run_compression_job,
+        args=(media_path, media_key, torrent_hash),
+        daemon=True,
+    ).start()
 
     return {
         "status": "started",
